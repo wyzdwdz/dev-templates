@@ -1,5 +1,5 @@
 {
-  description = "A Nix-flake-based Tauri development environment";
+  description = "A Nix-flake-based Rust development environment";
 
   inputs = {
     nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1";
@@ -65,17 +65,20 @@
             pango
             webkitgtk_4_1
             openssl
+            glib-networking
           ];
 
           shellHook = with pkgs; ''
-            export XDG_DATA_DIRS=${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}:$XDG_DATA_DIRS;
-            export GIO_MODULE_DIR="${pkgs.glib-networking}/lib/gio/modules/";
+            export XDG_DATA_DIRS=${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}:${gtk4}/share/gsettings-schemas/${gtk4.name}:${gtk3}/share/gsettings-schemas/${gtk3.name}:${hicolor-icon-theme}/share:$XDG_DATA_DIRS;
+            export GIO_MODULE_DIR="${glib-networking}/lib/gio/modules/:${dconf}/lib/gio/modules:$GIO_MODULE_DIR";
           '';
 
           env = {
             # Required by rust-analyzer
             RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
             __NV_DISABLE_EXPLICIT_SYNC = 1;
+            WEBKIT_DISABLE_DMABUF_RENDERER = 1;
+            GDK_BACKEND = "x11";
           };
         };
       });

@@ -70,7 +70,7 @@
 
           shellHook = with pkgs; ''
             export XDG_DATA_DIRS=${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}:${gtk4}/share/gsettings-schemas/${gtk4.name}:${gtk3}/share/gsettings-schemas/${gtk3.name}:${hicolor-icon-theme}/share:$XDG_DATA_DIRS;
-            export GIO_MODULE_DIR="${glib-networking}/lib/gio/modules/:${dconf}/lib/gio/modules:$GIO_MODULE_DIR";
+            export GIO_MODULE_DIR="${glib-networking}/lib/gio/modules";
           '';
 
           env = {

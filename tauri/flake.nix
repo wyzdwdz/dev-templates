@@ -37,13 +37,15 @@
               extensions = [ "rust-src" "rustfmt" ];
             };
         nodejs = prev.nodejs;
+        mkShellNoCC = prev.mkShellNoCC.override {
+            stdenv = prev.stdenvNoCC.override { extraBuildInputs = [ ]; };
+        };
       };
 
       devShells = forEachSupportedSystem ({ pkgs }: {
-        default = pkgs.mkShell {
+        default = pkgs.mkShellNoCC {
           nativeBuildInputs = with pkgs; [
             rustToolchain
-            pkg-config
             cargo-deny
             cargo-edit
             cargo-watch
@@ -52,33 +54,9 @@
             nodePackages.pnpm
           ];
 
-          buildInputs = with pkgs; [
-            at-spi2-atk
-            atkmm
-            cairo
-            gdk-pixbuf
-            glib
-            gtk3
-            harfbuzz
-            librsvg
-            libsoup_3
-            pango
-            webkitgtk_4_1
-            openssl
-            glib-networking
-          ];
-
-          shellHook = with pkgs; ''
-            export XDG_DATA_DIRS=${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}:${gtk4}/share/gsettings-schemas/${gtk4.name}:${gtk3}/share/gsettings-schemas/${gtk3.name}:${hicolor-icon-theme}/share:$XDG_DATA_DIRS;
-            export GIO_MODULE_DIR="${glib-networking}/lib/gio/modules";
-          '';
-
           env = {
             # Required by rust-analyzer
             RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
-            __NV_DISABLE_EXPLICIT_SYNC = 1;
-            WEBKIT_DISABLE_DMABUF_RENDERER = 1;
-            GDK_BACKEND = "x11";
           };
         };
       });

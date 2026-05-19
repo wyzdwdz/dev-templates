@@ -1,86 +1,132 @@
 {
-  description = "A Nix-flake-based Rust development environment";
+  description = "A Nix-flake-based Tauri development environment";
 
   inputs = {
-    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
+    nixpkgs.url = "https://flakehub.com/f/NixOS/nixpkgs/0.1"; # unstable Nixpkgs
+    fenix = {
+      url = "https://flakehub.com/f/nix-community/fenix/0.1";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = inputs:
+  outputs =
+    { self, ... }@inputs:
+
     let
-      supportedSystems = [ "x86_64-linux" "aarch64-linux" "x86_64-darwin" "aarch64-darwin" ];
-      forEachSupportedSystem = f: inputs.nixpkgs.lib.genAttrs supportedSystems (system: f {
-        pkgs = import inputs.nixpkgs {
-          inherit system;
-          overlays = [
-            inputs.rust-overlay.overlays.default
-            inputs.self.overlays.default
-          ];
-        };
-      });
+      supportedSystems = [
+        "x86_64-linux"
+        "aarch64-linux"
+      ];
+      forEachSupportedSystem =
+        f:
+        inputs.nixpkgs.lib.genAttrs supportedSystems (
+          system:
+          f {
+            inherit system;
+            pkgs = import inputs.nixpkgs {
+              inherit system;
+              overlays = [
+                inputs.self.overlays.default
+              ];
+            };
+          }
+        );
     in
     {
       overlays.default = final: prev: {
         rustToolchain =
-          let
-            rust = prev.rust-bin;
-          in
-          if builtins.pathExists ./rust-toolchain.toml then
-            rust.fromRustupToolchainFile ./rust-toolchain.toml
-          else if builtins.pathExists ./rust-toolchain then
-            rust.fromRustupToolchainFile ./rust-toolchain
-          else
-            rust.stable.latest.default.override {
-              extensions = [ "rust-src" "rustfmt" ];
-            };
-        nodejs = prev.nodejs;
+          with inputs.fenix.packages.${prev.stdenv.hostPlatform.system};
+          combine (
+            with stable;
+            [
+              clippy
+              rustc
+              cargo
+              rustfmt
+              rust-src
+            ]
+          );
       };
 
-      devShells = forEachSupportedSystem ({ pkgs }: {
-        default = pkgs.mkShell {
-          nativeBuildInputs = with pkgs; [
-            rustToolchain
-            pkg-config
-            cargo-deny
-            cargo-edit
-            cargo-watch
-            rust-analyzer
-            nodejs
-            nodePackages.pnpm
-          ];
+      devShells = forEachSupportedSystem (
+        { pkgs, system }:
+        let
+          morsmortium-gtk-nocsd = pkgs.stdenv.mkDerivation {
+            pname = "morsmortium-gtk-nocsd";
+            version = "0-unstable-2026-05-19";
 
-          buildInputs = with pkgs; [
-            at-spi2-atk
-            atkmm
-            cairo
-            gdk-pixbuf
-            glib
-            gtk3
-            harfbuzz
-            librsvg
-            libsoup_3
-            pango
-            webkitgtk_4_1
-            openssl
-            glib-networking
-          ];
+            src = pkgs.fetchgit {
+              url = "https://codeberg.org/MorsMortium/GTK-NoCSD.git";
+              rev = "b9b6ddacf53d2d4253697472384b31ec09c60495";
+              sha256 = "sha256-3aHhGjlcLus5TaOaniJVe4qs+y56Z6UJj6NjTdAv+x4=";
+            };
 
-          shellHook = with pkgs; ''
-            export XDG_DATA_DIRS=${gsettings-desktop-schemas}/share/gsettings-schemas/${gsettings-desktop-schemas.name}:${gtk4}/share/gsettings-schemas/${gtk4.name}:${gtk3}/share/gsettings-schemas/${gtk3.name}:${hicolor-icon-theme}/share:$XDG_DATA_DIRS;
-            export GIO_MODULE_DIR="${glib-networking}/lib/gio/modules";
-          '';
+            nativeBuildInputs = [ pkgs.pkg-config ];
+            buildInputs = with pkgs; [
+              libadwaita
+              glib
+            ];
 
-          env = {
-            # Required by rust-analyzer
-            RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
-            __NV_DISABLE_EXPLICIT_SYNC = 1;
-            WEBKIT_DISABLE_DMABUF_RENDERER = 1;
-            GDK_BACKEND = "x11";
+            buildPhase = ''
+              make build
+            '';
+
+            installPhase = ''
+              mkdir -p $out/lib
+              cp libgtk-nocsd.so.0 $out/lib/
+            '';
           };
-        };
-      });
+
+        in
+        {
+          default = pkgs.mkShell rec {
+            packages = with pkgs; [
+              rustToolchain
+              openssl
+              pkg-config
+              cargo-deny
+              cargo-edit
+              cargo-watch
+              rust-analyzer
+              self.formatter.${system}
+            ];
+
+            nativeBuildInputs = with pkgs; [
+              cargo-tauri
+              nodejs
+              pnpm
+            ];
+
+            buildInputs = with pkgs; [
+              librsvg
+              webkitgtk_4_1
+              glib
+              gtk3
+              gdk-pixbuf
+              cairo
+              dbus
+              libsoup_3
+              gst_all_1.gstreamer
+              gst_all_1.gst-plugins-base
+              gst_all_1.gst-plugins-good
+              gst_all_1.gst-plugins-bad
+              gst_all_1.gst-plugins-ugly
+            ];
+
+            env = {
+              # Required by rust-analyzer
+              RUST_SRC_PATH = "${pkgs.rustToolchain}/lib/rustlib/src/rust/library";
+            };
+
+            shellHook = ''
+              export XDG_DATA_DIRS="$GSETTINGS_SCHEMAS_PATH:$XDG_DATA_DIRS"
+              export LD_LIBRARY_PATH="${pkgs.lib.makeLibraryPath buildInputs}:$LD_LIBRARY_PATH"
+              export LD_PRELOAD="${morsmortium-gtk-nocsd}/lib/libgtk-nocsd.so.0:$LD_PRELOAD"
+            '';
+          };
+        }
+      );
+
+      formatter = forEachSupportedSystem ({ pkgs, ... }: pkgs.nixfmt);
     };
 }
